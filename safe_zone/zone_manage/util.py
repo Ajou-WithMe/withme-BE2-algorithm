@@ -54,7 +54,9 @@ def ttl_update(ttl): #ttl형식 2021-07-19
         t = str(ttl).split(' ')[0].split('-')
         cloc= str(datetime(int(t[0]), int(t[1]), int(t[2])) - datetime.now()).split(' ')[0]
         if str(cloc) < '7' or str(cloc).find(':'):
-            ttl = datetime(int(t[0]), int(t[1]), int(t[2]),tzinfo=pytz.UTC) + timedelta(days=1) #str(datetime(int(t[0]), int(t[1]), int(t[2])) + timedelta(days=1)).split(' ')[0]
+            KST = pytz.timezone('Asia/Seoul')
+            ttl = datetime(int(t[0]), int(t[1]), int(t[2]),tzinfo=KST) + timedelta(days=1) #str(datetime(int(t[0]), int(t[1]), int(t[2])) + timedelta(days=1)).split(' ')[0]
+            print(ttl)
     return ttl
 
 

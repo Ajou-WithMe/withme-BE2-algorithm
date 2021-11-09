@@ -64,12 +64,12 @@ def Init_SafeZone(request):
             if count == 8: cache_i2=i;break
 
         constants.new_uid = jsonbyte[cache_i1+2:cache_i2].decode('utf-8')
-
         data = JSONParser().parse(request)
+
         #constants.old_vertex, constants.new_uid =[tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))], uid #str(uid)
         constants.old_vertex = [tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))]
         stat, total_max_x, total_min_y = vertify.zone_min_size(constants.old_vertex) #여기까지가 20ms
-        #print(stat)
+
         if stat == 1:  # 여기는 임시 변수만 사용하기.(새로운 유저들이 각자꺼만 저장해야하므로)
             #1101#geodjango => 950개 recovery, 여기 =>1406 . 또한 y,x로 되어있는데 x,y로 바꿔서 안돌리고 그냥 그대로 + 배열 reverse안하고 그냥 그대로 돌려도 잘 나옴
             print("start the init process")
@@ -82,6 +82,7 @@ def Init_SafeZone(request):
             connectDB.save_DB_old_vertex_recovery(constants.new_uid, old_vertex_recovery)
             connectDB.save_user_ttl(constants.new_uid, constants.user_ttl,total_max_x,total_min_y)# 여기까지(recovery 5천개 넣는거 빼고)가 816ms
             return_status = 201;success = True;stat={"temp_x":total_max_x, "temp_y":total_min_y}
+
         data1 = {
                 "success": success,
                 "status": return_status,
@@ -154,21 +155,21 @@ def location_test(request):
             print('user zone_mature_time is lower than 7')
             status_sub, old_vertex_new = vertify.check_data_sub2(constants.new_data, constants.old_vertex_recovery, status_sub)
 
-            if (status_sub == 1):  print('you are in safe_zone');sendData = 1
+            if (status_sub == 1):  print('you are in safe_zone');sendData = 1;return_status=201;success=True
             elif (status_sub == 2):  # if totally outside, ⇒ rebuild safe_zone
                 print('warning: you are location out of safe_zone')
                 ttl_temp = 0
                 constants.old_vertex_recovery, old_vertex_new, ttl_temp = vertify.start_perbox_add(old_vertex_new, constants.new_data,constants.temp_x, constants.temp_y,constants.old_vertex_recovery,constants.per_box_size, ttl_temp)
                 connectDB.save_recovery_ttl_one(constants.cache_uid, ttl_temp)
                 connectDB.save_DB_old_vertex_recovery_one(constants.cache_uid, old_vertex_new)
-                sendData = 2#old_vertex_new
+                sendData = 2;return_status=201;success=True#old_vertex_new
                 # return_status=201;success=True
 
 
         else:  # USE old_vertex_recovery
             status,constants.ttl = vertify.check_data_main(constants.new_data, constants.old_vertex_recovery, constants.status, constants.ttl, constants.cache_uid)
             sendData=1
-            if (status == 1): print('you are in safe_zone')
+            if (status == 1): print('you are in safe_zone');return_status=201;success=True
             elif (status == 2):
                 print('warning: you are location out of safe_zone')# if outside ⇒ rebuild safe_zone
                 old_vertex_new=0; ttl_temp=0
@@ -176,6 +177,7 @@ def location_test(request):
                 connectDB.save_recovery_ttl_one(constants.cache_uid, ttl_temp)
                 connectDB.save_DB_old_vertex_recovery_one(constants.cache_uid, old_vertex_new)
                 sendData=2;return_status=201;success=True
+
         constants.prev_data = constants.new_data
         data1 = {
             "success": success,

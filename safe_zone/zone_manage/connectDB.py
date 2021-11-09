@@ -65,9 +65,10 @@ def save_DB_old_vertex_recovery(new_uid,old_vertex_recovery):#여기는 박스 �
 
 def save_user_ttl(new_uid, user_ttl,x_temp,y_temp):
     temp = User.objects.get(uid=new_uid)
-    temp.created_at = user_ttl
-    t = UserOption(is_init_safe_zone=0,push_alarm=0,safe_move=0,x_temp=x_temp,y_temp=y_temp,user_id=temp.id)
-    temp.save()
+    #temp.created_at = user_ttl
+    t = UserOption.objects.get(user_id=temp.id)
+    t.box_size, t.is_init_safe_zone, t.x_temp, t.y_temp = 100.0, 0, x_temp, y_temp
+    #temp.save()
     t.save()
     return
 
