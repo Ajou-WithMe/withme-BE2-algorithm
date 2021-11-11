@@ -146,43 +146,50 @@ def save_DB_old_vertex_recovery_one(cache_uid,old_vertex_new):#여기는 safe_zo
     return
 
 
-def load_DB_all_vertex(cache_uid):
-    temp = User.objects.get(uid=cache_uid)
-    latitude = Location.objects.filter(user_id=temp.id).values_list('latitude', flat=True)
-    longitude = Location.objects.filter(user_id=temp.id).values_list('longitude', flat=True)
+def load_DB_all_vertex(user_id):
+    latitude = Location.objects.filter(user_id=user_id).values_list('latitude', flat=True)
+    longitude = Location.objects.filter(user_id=user_id).values_list('longitude', flat=True)
     print(len(latitude),len(longitude))
     ls=[]
     for i in range(len(latitude)):
-        ls.append(tuple([latitude,longitude]))
-    t = UserOption.objects.get(user_id=temp.id)
+        ls.append(tuple([latitude[i],longitude[i]]))
+    t = UserOption.objects.get(user_id=user_id)
     return ls, t.box_size, t.distance, t.time
 
 
-def delete_all_recovery_ttl(cache_uid):
-    temp = User.objects.get(uid=cache_uid)
-    SafeZone.objects.filter(user_id=temp.id).delete()
+def delete_all_recovery_ttl(user_id):
+    #temp = User.objects.get(uid=cache_uid)
+    SafeZone.objects.filter(user_id=user_id).delete()
     return
 
 
-def delete_all_old_vertex_recovery(cache_uid):
-    te = User.objects.get(uid=cache_uid)
-    temp = ZoneLocation.objects.filter(user_id=te.id).delete()#SafeZone.objects.filter(user_id=te.id).prefetch_related('id')
+def delete_all_old_vertex_recovery(user_id):
+    #te = User.objects.get(uid=cache_uid)
+    ZoneLocation.objects.filter(user_id=user_id).delete()#SafeZone.objects.filter(user_id=te.id).prefetch_related('id')
     return
 
 
-def delete_ttl(cache_uid, old_vertex_delete):
-    temp = User.objects.get(uid=cache_uid)
-    t = SafeZone.objects.filter(user_id=temp.id)
-    print(len(t))
-    for idx in old_vertex_delete:
-        t[idx].delete()
+def delete_ttl(user_id, old_vertex_delete):
+    #temp = User.objects.get(uid=cache_uid)
+    while True:
+        count = 0
+        t = SafeZone.objects.filter(user_id=user_id)
+        print(len(t))
+        for idx in old_vertex_delete:
+            count += 1
+            SafeZone.objects.get(pk=t[idx].id).delete()
+            old_vertex_delete.remove(idx)
+            if count == 100: break
+        if len(old_vertex_delete) == 0: break
+    #for idx in old_vertex_delete:  #여기 삭제가 이상하다
+    #    t[idx].delete()
     return
 
 
-def delete_DB_old_vertex_recovery(cache_uid, old_vertex_delete): #old_vertex_delete는 2차원 배열로 삭제할 perbox들 집합
+def delete_DB_old_vertex_recovery(user_id, old_vertex_delete): #old_vertex_delete는 2차원 배열로 삭제할 perbox들 집합
     #cascade로 될테니까 너무 걱정 말구
-    temp = User.objects.get(uid=cache_uid)
-    t = ZoneLocation.objects.filter(user_id=temp.id)
+    #temp = User.objects.get(uid=cache_uid)
+    t = ZoneLocation.objects.filter(user_id=user_id)
     print(len(t))
     for idx in old_vertex_delete:
         t[idx].delete()
@@ -192,6 +199,7 @@ def delete_DB_old_vertex_recovery(cache_uid, old_vertex_delete): #old_vertex_del
 def save_recovery_ttl_mod(cache_uid,value, ttl_temp):
     temp = User.objects.get(uid=cache_uid)
     t = SafeZone.objects.filter(user_id=temp.id)
+
     print(len(t))
     t[ttl_temp].ttl=value
     t[ttl_temp].save()

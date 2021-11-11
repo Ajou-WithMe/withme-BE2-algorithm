@@ -16,9 +16,12 @@ Including another URLconf
 from django.urls import path
 from . import views
 urlpatterns = [
-    path('c/',views.connect, name = 'connectDB'),
     path('certify_zone/',views.Init_SafeZone, name = 'certify_zone'),
     path('certify_gps/',views.location_test, name = 'certify_gps'),
+    path('certify/',views.test_for_location, name = 'certify'),
+    path('certify_1/',views.con_test11, name = 'certify_1'),
+    path('certify_2/',views.con_test22, name = 'certify_2'),
+    #path('c/',views.connect, name = 'connectDB'),
     #path('certify_zone/<str:uid>/',views.Init_SafeZone, name = 'certify_zone'),
     #path('certify_gps/<str:uid>/',views.location_test, name = 'certify_gps'),
 ]

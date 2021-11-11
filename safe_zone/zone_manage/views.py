@@ -9,8 +9,10 @@ from .models import SafeZone, User, ZoneLocation,UserOption,Location, InitSafeZo
 from .serializers import InitSafeZoneSer
 from rest_framework.parsers import JSONParser
 from . import connectDB, constants, vertify, util
-import json,datetime, jwt, base64, struct
-
+import json, jwt, base64, struct
+from django.utils import timezone
+from datetime import datetime, timedelta
+import pytz
 
 @csrf_exempt
 def connect(request):
@@ -130,22 +132,20 @@ def location_test(request):
             }
             return JsonResponse(data1, safe=False)
 
-        if (constants.cache_uid != constants.new_uid):
+        constants.ttl = connectDB.load_recovery_ttl(constants.new_uid)
+        if (constants.cache_uid != constants.new_uid):#type(constants.ttl)==queryset , type(constants.old_vertex_recovery)=list
             print("user has been changed")
             if constants.cache_uid != 0:
                 connectDB.save_variable_DB(constants.cache_uid, constants.per_box_size, constants.sum_dist, constants.count_t, constants.temp_x, constants.temp_y, constants.start_section)
             constants.cache_uid = constants.new_uid
-            constants.ttl= connectDB.load_recovery_ttl(constants.new_uid)
             #ttl은 queryset형태. 파이썬 내부에서 수정 못하고 DB에 접근해서 수정해야함
             constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(constants.new_uid)
             constants.user_ttl, constants.per_box_size, constants.sum_dist, constants.count_t,constants.temp_x, constants.temp_y, constants.start_section = connectDB.load_variable_DB(constants.new_uid)
-        #print(constants.user_ttl, constants.per_box_size, constants.sum_dist, constants.count_t,constants.temp_x, constants.temp_y, constants.start_section)
-        constants.per_box_size=100
 
-        print("user started process: ", datetime.datetime.now())
+        print("user started process: ", datetime.now())
         # user ttl type check please###
         t = str(constants.user_ttl).split(' ')[0].split('-')  # old_vertex[-1].split('-')
-        zone_mature_time = str(datetime.datetime.now() - datetime.datetime(int(t[0]), int(t[1]), int(t[2]))).split(' ')[0]
+        zone_mature_time = str(datetime.now() - datetime(int(t[0]), int(t[1]), int(t[2]))).split(' ')[0]
         # 이때 2021-10-02 - 2021-10-02가 되면(1일째의 경우) 시간만 남으므로 이때는 0으로 str처리해주기
         if zone_mature_time.find(':'): zone_mature_time = '0'
 
@@ -159,11 +159,11 @@ def location_test(request):
             elif (status_sub == 2):  # if totally outside, ⇒ rebuild safe_zone
                 print('warning: you are location out of safe_zone')
                 ttl_temp = 0
-                constants.old_vertex_recovery, old_vertex_new, ttl_temp = vertify.start_perbox_add(old_vertex_new, constants.new_data,constants.temp_x, constants.temp_y,constants.old_vertex_recovery,constants.per_box_size, ttl_temp)
+                old_vertex_new, ttl_temp = vertify.start_perbox_add(old_vertex_new, constants.new_data,constants.temp_x, constants.temp_y,constants.per_box_size, ttl_temp)
+                constants.old_vertex_recovery.append(old_vertex_new)
                 connectDB.save_recovery_ttl_one(constants.cache_uid, ttl_temp)
                 connectDB.save_DB_old_vertex_recovery_one(constants.cache_uid, old_vertex_new)
                 sendData = 2;return_status=201;success=True#old_vertex_new
-                # return_status=201;success=True
 
 
         else:  # USE old_vertex_recovery
@@ -173,7 +173,8 @@ def location_test(request):
             elif (status == 2):
                 print('warning: you are location out of safe_zone')# if outside ⇒ rebuild safe_zone
                 old_vertex_new=0; ttl_temp=0
-                constants.old_vertex_recovery, old_vertex_new, ttl_temp = vertify.safe_zone_process(old_vertex_new,constants.new_data, constants.temp_x, constants.temp_y, constants.old_vertex_recovery, constants.per_box_size,ttl_temp)
+                old_vertex_new, ttl_temp = vertify.safe_zone_process(old_vertex_new,constants.new_data, constants.temp_x, constants.temp_y, constants.per_box_size,ttl_temp)
+                constants.old_vertex_recovery.append(old_vertex_new)
                 connectDB.save_recovery_ttl_one(constants.cache_uid, ttl_temp)
                 connectDB.save_DB_old_vertex_recovery_one(constants.cache_uid, old_vertex_new)
                 sendData=2;return_status=201;success=True
@@ -185,3 +186,98 @@ def location_test(request):
             "data": sendData
         }
         return JsonResponse(data1, safe=False)
+
+
+@csrf_exempt
+def test_for_location(request):
+    #위에서 얻어온 constants.new_uid를 기반으로
+    temp_t=[]
+    constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(constants.new_uid)
+    local_tz = pytz.timezone("Asia/Seoul")
+    converted_utc_dt = datetime.now() - timedelta(days=1)
+    ttl = pytz.utc.localize(converted_utc_dt).astimezone(local_tz)
+    print(ttl)
+    te=User.objects.get(uid=constants.new_uid)
+
+    for old in constants.old_vertex_recovery:
+        x = (old[0][0]+old[3][0])/2;y = (old[0][1]+old[1][1])/2
+        ttl = ttl + timedelta(seconds=10)
+        temp_t.append(Location(created_at = ttl, latitude=x, longitude=y, user_id=te.id))
+
+    Location.objects.bulk_create(temp_t, batch_size=999)
+    data1 = {
+        "success": 201,
+        "status": True,
+        "data": 1
+    }
+    print(len(temp_t))
+    print(ttl)
+    return JsonResponse(data1, safe=False)
+
+
+@csrf_exempt
+def con_test11(request):
+    constants.cache_uid = 0
+    print('shceduler update_safe_zone after Day 7')
+    # 먼저 최소 size 검증을 진행하기 위해서 all_vertex를 DB에서 load
+    a = UserOption.objects.filter(is_init_safe_zone__lt=1)
+    print(len(a))
+
+    for i in range(len(a)):
+        temp = User.objects.get(id=a[i].user_id)
+        uid = temp.uid
+        t = str(temp.created_at).split(' ')[0].split('-')
+        cloc = str(datetime.now() -datetime(int(t[0]), int(t[1]), int(t[2]))).split(' ')[0]
+
+        #if cloc <= '7' or cloc.find(':') != -1: continue
+
+        all_vertex = []
+        all_vertex, constants.per_box_size, constants.sum_dist, constants.count_t = connectDB.load_DB_all_vertex(a[i].user_id)  # 8만개 data 효택 DB에서 load, 평균속도도 load
+        constants.per_box_size = 100
+        #constants.per_box_size = (constants.sum_dist / constants.count_t) * 90
+        stat, total_max_x, total_min_y = vertify.zone_min_size(all_vertex)
+
+        if stat != 1: continue
+        constants.old_vertex_recovery = [];constants.ttl = []
+        constants.start_section = 1  # 8일이라고 8일에 갑자기 100회 이거 진행하는거 아니자나. 8일되었을때라도 딱 한번만 진행되어야하자나
+        constants.temp_x, constants.temp_y, constants.old_vertex_recovery, constants.ttl = util.personal_box_first_time(
+            constants.old_vertex_recovery, all_vertex, constants.per_box_size, constants.ttl, uid)
+
+        print('user safe_zone update')
+        connectDB.delete_all_recovery_ttl(a[i].user_id)
+        #connectDB.delete_all_old_vertex_recovery(a[i].user_id)
+        connectDB.save_recovery_ttl(uid, constants.ttl)
+        connectDB.save_DB_old_vertex_recovery(uid, constants.old_vertex_recovery)
+        connectDB.save_variable_DB(uid, constants.per_box_size, constants.sum_dist, constants.count_t,
+                                   constants.temp_x, constants.temp_y, constants.start_section)
+    data1 = {
+        "success": 201,
+        "status": True,
+        "data": 1
+    }
+    return JsonResponse(data1, safe=False)
+
+
+@csrf_exempt
+def con_test22(request):
+    constants.cache_uid = 0
+    print('shceduler delete_expire_ttl after Day 7')
+    a = UserOption.objects.filter(is_init_safe_zone__gt=0)
+    print(len(a))
+
+    for i in range(len(a)):
+        # if a[i].is_init_safe_zone != 1: continue
+        uid = User.objects.get(id=a[i].user_id).uid
+        constants.ttl = connectDB.load_recovery_ttl(uid)
+        constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(uid)
+        constants.temp_x, constants.temp_y, constants.old_vertex_recovery, constants.ttl = util.personal_box_recovery_all_users(
+            a[i].user_id, constants.old_vertex_recovery, constants.ttl)
+        connectDB.save_variable_DB(uid, a[i].box_size, a[i].distance, a[i].time, constants.temp_x,
+                                   constants.temp_y, a[i].is_init_safe_zone)
+        # frontend에서는, 어차피 낮에 활동할때 바뀐 safe_zone에 대해서 내부외부 검증하고, 외부면 safe_zone 가져와서 그리므로, 따로 signal 안 보내줘도 괜찮음
+    data1 = {
+        "success": 201,
+        "status": True,
+        "data": 1
+    }
+    return JsonResponse(data1, safe=False)

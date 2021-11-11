@@ -29,7 +29,7 @@ def data_split2(msg):
 
 
 def zone_min_size(old_vertex):
-    #5.35KM
+    #4.23KM
     total_min_x, total_min_y, total_max_x, total_max_y, coordi_sort1 = util.find_minmax_vertex(old_vertex)
     if abs(total_max_x - total_min_x) < 0.0423:
         stat=3
@@ -124,6 +124,7 @@ def check_data_main(new_data, old_vertex_recovery, status,ttl_temp, cache_uid):
     flag=0
     if str(type(ttl_temp)).find('QuerySet') > 0: flag=1
     else: flag=2
+
     for old_vertex in old_vertex_recovery:
         count = 0
         for curr in range(4):  # for curr in range(1,len(old_vertex)):
@@ -142,18 +143,102 @@ def check_data_main(new_data, old_vertex_recovery, status,ttl_temp, cache_uid):
         #if count % 2 == 0: status = 2
         if status == 1:
             if flag==2:
-                ttl_temp = util.ttl_update(ttl_temp)
+                #ttl_temp = util.ttl_update(ttl_temp)
+                return status
                 #connectDB.save_recovery_ttl_mod(cache_uid, value, ttl_temp)
             elif flag==1:
                 #ttl_temp[old_vertex_recovery.index(old_vertex)]
                 t= util.ttl_update(ttl_temp[old_vertex_recovery.index(old_vertex)])
                 connectDB.save_recovery_ttl_mod(cache_uid, t, old_vertex_recovery.index(old_vertex))
-            return status,ttl_temp
-        if (status != 1): status = 2
+                return status,ttl_temp
+        if (status != 1): status = 2;continue
     return status,ttl_temp
 
 
-def start_perbox_add(old_vertex_new,new_data,temp_x,temp_y,old_vertex_recovery,per_box_size,ttl_temp):
+def start_perbox_add(old_vertex_new,new_data,temp_x,temp_y,per_box_size,ttl_temp):
+    per_box = per_box_size / 100000
+    digit = len(str(per_box)) - 2
+    local_tz = pytz.timezone("Asia/Seoul")
+    converted_utc_dt = datetime.now() + timedelta(days=1)
+    ttl_temp = pytz.utc.localize(converted_utc_dt).astimezone(local_tz)
+    if temp_x < new_data[0]:
+        t_x = temp_x
+        while True:
+            t_x = t_x + per_box
+            if (t_x > new_data[0]): break
+
+        if temp_y > new_data[1]:
+            t_y = temp_y
+            while True:
+                t_y = t_y - per_box
+                if (t_y < new_data[1]): break
+            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y + per_box, digit)
+            temp = []
+            temp.append((t_xx, t_yy))
+            temp.append((t_xx, t_yy_per))
+            temp.append((t_xx_per, t_yy_per))
+            temp.append((t_xx_per, t_yy))
+            #ttl_temp = timezone.now().astimezone() + timedelta(days=1)
+            #old_vertex_recovery.append(temp)
+            old_vertex_new = temp
+
+        else:
+            t_y = temp_y
+            while True:
+                if (t_y + per_box > new_data[1]):break
+                t_y = t_y + per_box
+            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y + per_box, digit)
+            temp = []
+            temp.append((t_xx, t_yy))
+            temp.append((t_xx, t_yy_per))
+            temp.append((t_xx_per, t_yy_per))
+            temp.append((t_xx_per, t_yy))
+            #ttl_temp = timezone.now().astimezone() + timedelta(days=1)
+            #old_vertex_recovery.append(temp)
+            old_vertex_new = temp
+
+    else:
+        t_x = temp_x
+        while True:
+            if (t_x - per_box < new_data[0]): break
+            t_x = t_x - per_box
+
+        if temp_y > new_data[1]:
+            t_y = temp_y
+            while True:
+                t_y = t_y - per_box
+                if (t_y < new_data[1]): break
+            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y + per_box, digit)
+            temp = []
+            temp.append((t_xx, t_yy))
+            temp.append((t_xx, t_yy_per))
+            temp.append((t_xx_per, t_yy_per))
+            temp.append((t_xx_per, t_yy))
+            #ttl_temp = timezone.now().astimezone() + timedelta(days=1)
+            #old_vertex_recovery.append(temp)
+            old_vertex_new = temp
+
+        else:
+            t_y = temp_y
+            while True:
+                if (t_y + per_box > new_data[1]): break
+                t_y = t_y + per_box
+            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y + per_box, digit)
+            temp = []
+            temp.append((t_xx, t_yy))
+            temp.append((t_xx, t_yy_per))
+            temp.append((t_xx_per, t_yy_per))
+            temp.append((t_xx_per, t_yy))
+            #ttl_temp = timezone.now().astimezone() + timedelta(days=1)
+            #old_vertex_recovery.append(temp)
+            old_vertex_new = temp
+    return old_vertex_new, ttl_temp
+
+
+def safe_zone_process(old_vertex_new,new_data,temp_x,temp_y,per_box_size,ttl_temp):
+    local_tz = pytz.timezone("Asia/Seoul")
+    converted_utc_dt = datetime.now() + timedelta(days=1)
+    ttl_temp = pytz.utc.localize(converted_utc_dt).astimezone(local_tz)
     per_box = per_box_size / 100000
     digit = len(str(per_box)) - 2
 
@@ -168,14 +253,14 @@ def start_perbox_add(old_vertex_new,new_data,temp_x,temp_y,old_vertex_recovery,p
             while True:
                 t_y = t_y - per_box
                 if (t_y < new_data[1]): break
-            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y - per_box, digit)
+            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y + per_box, digit)
             temp = []
-            temp.append((t_xx, t_yy_per))
             temp.append((t_xx, t_yy))
-            temp.append((t_xx_per, t_yy))
+            temp.append((t_xx, t_yy_per))
             temp.append((t_xx_per, t_yy_per))
-            ttl_temp = timezone.now() + timedelta(days=1)
-            old_vertex_recovery.append(temp)
+            temp.append((t_xx_per, t_yy))
+            #ttl_temp=ttl
+            #old_vertex_recovery.append(temp)
             old_vertex_new = temp
 
         else:
@@ -189,14 +274,15 @@ def start_perbox_add(old_vertex_new,new_data,temp_x,temp_y,old_vertex_recovery,p
             temp.append((t_xx, t_yy_per))
             temp.append((t_xx_per, t_yy_per))
             temp.append((t_xx_per, t_yy))
-            ttl_temp=timezone.now() + timedelta(days=1)
-            old_vertex_recovery.append(temp)
+            #ttl_temp=ttl
+            #old_vertex_recovery.append(temp)
             old_vertex_new = temp
+
 
     else:
         t_x = temp_x
         while True:
-            if (t_x - per_box > new_data[0]): break
+            if (t_x - per_box < new_data[0]): break
             t_x = t_x - per_box
 
         if temp_y > new_data[1]:
@@ -204,14 +290,14 @@ def start_perbox_add(old_vertex_new,new_data,temp_x,temp_y,old_vertex_recovery,p
             while True:
                 t_y = t_y - per_box
                 if (t_y < new_data[1]): break
-            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y - per_box, digit)
+            t_xx = round(t_x, digit);t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y + per_box, digit)
             temp = []
-            temp.append((t_xx, t_yy_per))
             temp.append((t_xx, t_yy))
-            temp.append((t_xx_per, t_yy))
+            temp.append((t_xx, t_yy_per))
             temp.append((t_xx_per, t_yy_per))
-            ttl_temp=timezone.now() + timedelta(days=1)
-            old_vertex_recovery.append(temp)
+            temp.append((t_xx_per, t_yy))
+            #ttl_temp=ttl
+            #old_vertex_recovery.append(temp)
             old_vertex_new = temp
 
         else:
@@ -225,91 +311,11 @@ def start_perbox_add(old_vertex_new,new_data,temp_x,temp_y,old_vertex_recovery,p
             temp.append((t_xx, t_yy_per))
             temp.append((t_xx_per, t_yy_per))
             temp.append((t_xx_per, t_yy))
-            ttl_temp=timezone.now() + timedelta(days=1)
-            old_vertex_recovery.append(temp)
-            old_vertex_new = temp
-    return old_vertex_recovery , old_vertex_new, ttl_temp
-
-
-def safe_zone_process(old_vertex_new,new_data,temp_x,temp_y,old_vertex_recovery,per_box_size,ttl_temp):
-    ttl = timezone.now() + timedelta(days=1)
-    per_box = per_box_size / 100000
-    digit = len(str(per_box)) - 2
-
-    if temp_x < new_data[0]:
-        t_x = temp_x
-        while True:
-            t_x = t_x + per_box
-            if (t_x > new_data[0]): break
-
-        if temp_y > new_data[1]:
-            t_y = temp_y
-            while True:
-                t_y = t_y - per_box
-                if (t_y < new_data[1]): break
-            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y - per_box, digit)
-            temp = []
-            temp.append((t_xx, t_yy_per))
-            temp.append((t_xx, t_yy))
-            temp.append((t_xx_per, t_yy))
-            temp.append((t_xx_per, t_yy_per))
-            ttl_temp=ttl
-            old_vertex_recovery.append(temp)
+            #ttl_temp=ttl
+            #old_vertex_recovery.append(temp)
             old_vertex_new = temp
 
-        else:
-            t_y = temp_y
-            while True:
-                if (t_y + per_box > new_data[1]):break
-                t_y = t_y + per_box
-            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y + per_box, digit)
-            temp = []
-            temp.append((t_xx, t_yy))
-            temp.append((t_xx, t_yy_per))
-            temp.append((t_xx_per, t_yy_per))
-            temp.append((t_xx_per, t_yy))
-            ttl_temp=ttl
-            old_vertex_recovery.append(temp)
-            old_vertex_new = temp
-
-
-    else:
-        t_x = temp_x
-        while True:
-            if (t_x - per_box > new_data[0]): break
-            t_x = t_x - per_box
-
-        if temp_y > new_data[1]:
-            t_y = temp_y
-            while True:
-                t_y = t_y - per_box
-                if (t_y < new_data[1]): break
-            t_xx = round(t_x, digit);t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y - per_box, digit)
-            temp = []
-            temp.append((t_xx, t_yy_per))
-            temp.append((t_xx, t_yy))
-            temp.append((t_xx_per, t_yy))
-            temp.append((t_xx_per, t_yy_per))
-            ttl_temp=ttl
-            old_vertex_recovery.append(temp)
-            old_vertex_new = temp
-
-        else:
-            t_y = temp_y
-            while True:
-                if (t_y + per_box > new_data[1]): break
-                t_y = t_y + per_box
-            t_xx = round(t_x, digit); t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y + per_box, digit)
-            temp = []
-            temp.append((t_xx, t_yy))
-            temp.append((t_xx, t_yy_per))
-            temp.append((t_xx_per, t_yy_per))
-            temp.append((t_xx_per, t_yy))
-            ttl_temp=ttl
-            old_vertex_recovery.append(temp)
-            old_vertex_new = temp
-
-    return old_vertex_recovery, old_vertex_new,ttl_temp
+    return old_vertex_new,ttl_temp
 
 
 def start_perbox_add_newvr(old_vertex_new,t,temp_x, temp_y,per_box_size, ttl_temp):
