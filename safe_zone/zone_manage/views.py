@@ -141,6 +141,10 @@ def location_test(request):
             #ttl은 queryset형태. 파이썬 내부에서 수정 못하고 DB에 접근해서 수정해야함
             constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(constants.new_uid)
             constants.user_ttl, constants.per_box_size, constants.sum_dist, constants.count_t,constants.temp_x, constants.temp_y, constants.start_section = connectDB.load_variable_DB(constants.new_uid)
+        safe_move=0
+        us = User.objects.get(uid=constants.cache_uid)
+        u = UserOption.objects.get(user_id=us.id)
+        if u.safe_move == 1: safe_move=1
 
         print("user started process: ", datetime.now())
         # user ttl type check please###
@@ -180,6 +184,7 @@ def location_test(request):
                 sendData=2;return_status=201;success=True
 
         constants.prev_data = constants.new_data
+        if safe_move == 1: sendData=1
         data1 = {
             "success": success,
             "status": return_status,
