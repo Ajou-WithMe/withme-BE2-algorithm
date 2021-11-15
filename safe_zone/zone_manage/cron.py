@@ -21,6 +21,7 @@ def update_safe_zone():
         all_vertex, constants.per_box_size, constants.sum_dist, constants.count_t = connectDB.load_DB_all_vertex(a[i].user_id)  # 8만개 data 효택 DB에서 load, 평균속도도 load
         constants.per_box_size = 100
         # constants.per_box_size = (constants.sum_dist / constants.count_t) * 90
+        if len(all_vertex) == 0: continue
         stat, total_max_x, total_min_y = vertify.zone_min_size(all_vertex)
 
         if stat != 1: continue
