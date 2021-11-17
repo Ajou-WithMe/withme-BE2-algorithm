@@ -303,3 +303,26 @@ class ZoneLocation(models.Model):
     class Meta:
         #managed = False
         db_table = 'zone_location'
+
+
+class PredictionLocation(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    latitude = models.FloatField(blank=True, null=True)
+    longitude = models.FloatField(blank=True, null=True)
+    user = models.ForeignKey('User', models.DO_NOTHING, blank=True, null=True)
+
+    class Meta:
+        #managed = False
+        db_table = 'prediction_location'
+
+
+class VisitOften(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    grade = models.IntegerField()
+    latitude = models.FloatField(blank=True, null=True)
+    longitude = models.FloatField(blank=True, null=True)
+    user = models.ForeignKey(User, models.DO_NOTHING, blank=True, null=True)
+
+    class Meta:
+        #managed = False
+        db_table = 'visit_often'

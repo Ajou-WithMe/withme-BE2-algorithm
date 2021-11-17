@@ -6,7 +6,7 @@ from django.http import HttpResponse, JsonResponse
 from django.utils.encoding import force_text
 from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.csrf import csrf_exempt
-from .models import SafeZone, User, ZoneLocation,UserOption,Location, InitSafeZone
+from .models import SafeZone, User, ZoneLocation,UserOption,Location, InitSafeZone ,VisitOften
 from .serializers import InitSafeZoneSer
 from rest_framework.parsers import JSONParser
 from . import connectDB, constants, vertify, util
@@ -110,8 +110,12 @@ def put(request):
     print("start the init process")
     old_vertex_recovery = [];    ttl = []
     data = JSONParser().parse(request)
+
     constants.new_uid = data['uid']
+
     constants.old_vertex = [tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))]
+    print(constants.new_uid)
+    print(constants.old_vertex)
     stat, total_max_x, total_min_y = vertify.zone_min_size(constants.old_vertex)
     constants.temp_x, constants.temp_y, old_vertex_recovery, ttl = util.start_perbox(constants.old_vertex,old_vertex_recovery,constants.per_box_size, ttl)
     constants.user_ttl = util.start_with_user_vertex(constants.user_ttl)
@@ -198,7 +202,7 @@ def location_test(request):
         # 이때 2021-10-02 - 2021-10-02가 되면(1일째의 경우) 시간만 남으므로 이때는 0으로 str처리해주기
         if zone_mature_time.find(':'): zone_mature_time = '0'
 
-        #zone_mature_time='8'
+        #zone_mature_time='8'#지울거
         sendData = 0;status_sub = 0
         if (zone_mature_time <= '7'):  # use old_vertex #확대확대만 된다!: recovery배열을 보내줘야함 211002 => 2번검증하기!
             print('user zone_mature_time is lower than 7')
@@ -242,17 +246,32 @@ def location_test(request):
 def test_for_location(request):
     #위에서 얻어온 constants.new_uid를 기반으로
     temp_t=[]
-    constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(constants.new_uid)
+    constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery('ed4dba6f-cdd7-406e-8920-fe7d9afb62b8')#(constants.new_uid)
     local_tz = pytz.timezone("Asia/Seoul")
     converted_utc_dt = datetime.now() - timedelta(days=3)
     ttl = pytz.utc.localize(converted_utc_dt).astimezone(local_tz)
     print(ttl)
-    te=User.objects.get(uid=constants.new_uid)
+    te=User.objects.get(uid='ed4dba6f-cdd7-406e-8920-fe7d9afb62b8')#(uid=constants.new_uid)
 
     for old in constants.old_vertex_recovery:
         x = (old[0][0]+old[3][0])/2;y = (old[0][1]+old[1][1])/2
         ttl = ttl + timedelta(seconds=10)
         temp_t.append(Location(created_at = ttl, latitude=x, longitude=y, user_id=te.id))
+
+    for old in constants.old_vertex_recovery[:int(len(constants.old_vertex_recovery)/2)+1]:
+        x = (old[0][0]+old[3][0])/2;y = (old[0][1]+old[1][1])/2
+        ttl = ttl + timedelta(seconds=10)
+        temp_t.append(Location(created_at = ttl, latitude=x, longitude=y, user_id=te.id))
+
+    for old in constants.old_vertex_recovery[:int(len(constants.old_vertex_recovery)/3)+1]:
+        x = (old[0][0]+old[3][0])/2;y = (old[0][1]+old[1][1])/2
+        ttl = ttl + timedelta(seconds=10)
+        temp_t.append(Location(created_at = ttl, latitude=x, longitude=y, user_id=te.id))
+
+    for old in constants.old_vertex_recovery[:int(len(constants.old_vertex_recovery) / 5) + 1]:
+        x = (old[0][0] + old[3][0]) / 2;        y = (old[0][1] + old[1][1]) / 2
+        ttl = ttl + timedelta(seconds=10)
+        temp_t.append(Location(created_at=ttl, latitude=x, longitude=y, user_id=te.id))
 
     Location.objects.bulk_create(temp_t, batch_size=999)
     data1 = {
@@ -403,7 +422,7 @@ def create_check(request,id):
         t = str(temp[id].created_at).split(' ')[0].split('-')
         cloc = str(datetime.now() - datetime(int(t[0]), int(t[1]), int(t[2]))).split(' ')[0]
 
-        cloc='30'
+        #cloc='30'#지우기
 
         if cloc >= '29' and cloc.find(':') == -1:
             te, created_at = connectDB.load_DB_all_vertex2(temp[id].id)
@@ -434,5 +453,54 @@ def test(request):
         "success": 201,
         "status": True,
         "data": data
+    }
+    return JsonResponse(res_data, safe=False)
+
+
+@csrf_exempt
+def visit_often(request,id):#여기로 요청이 들어온다는건, 기존이 해당 id로 된 data가 VisitOften테이블에 있으면 안된다는거!!!
+    data=dict()
+    temp = User.objects.all()
+    print(len(temp))
+    if len(temp) == 0:
+        data = 2
+    else:
+        te = connectDB.load_DB_all_vertex3(temp[id].id)
+        if te['all_vertex'] == 2: data=2
+        else:
+            VisitOften.objects.filter(user_id=temp[id].id).delete()
+            data['id'] = temp[id].id
+            data['gps']=te
+
+    res_data = {
+        "success": 201,
+        "status": True,
+        "data": data
+    }
+    return JsonResponse(res_data, safe=False)
+
+
+#VisitOften, #latitude longitude grade user_id
+@csrf_exempt
+def visit_often_put(request,id):
+    data = JSONParser().parse(request)
+    temp_t=[]
+    if data['flag'] == 0:
+        for old_vertex in data["all_zone"]:
+            temp_t.extend([VisitOften(latitude=old[0], longitude=old[1], grade= data['grade'][0], user_id=id) for old in old_vertex])
+    else:
+        count=0; c_count=0; cache_count=0
+        for old_vertex in data["all_zone"]:
+            if c_count<3:
+                if count == data['flag'][c_count]:
+                    cache_count=c_count;c_count+=1
+            temp_t.extend([VisitOften(latitude=old[0], longitude=old[1], grade=data['grade'][cache_count], user_id=id) for old in old_vertex])
+            count+=1
+    VisitOften.objects.bulk_create(temp_t, batch_size=999)
+
+    res_data = {
+        "success": 201,
+        "status": True,
+        "data": 1
     }
     return JsonResponse(res_data, safe=False)

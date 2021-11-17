@@ -168,6 +168,17 @@ def load_DB_all_vertex2(user_id):
     return dictionary, created_at
 
 
+def load_DB_all_vertex3(user_id):
+    latitude = Location.objects.filter(user_id=user_id).values_list('latitude', flat=True)
+    longitude = Location.objects.filter(user_id=user_id).values_list('longitude', flat=True)
+    print(len(latitude), len(longitude))
+    dict_value=2
+    if len(latitude) > 3:
+        dict_value = [{"latitude": latitude[i], "longitude": longitude[i]} for i in range(len(latitude))]
+    dictionary = {"all_vertex" : dict_value}
+    return dictionary
+
+
 def delete_all_recovery_ttl(user_id):
     #temp = User.objects.get(uid=cache_uid)
     SafeZone.objects.filter(user_id=user_id).delete()
