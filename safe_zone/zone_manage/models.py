@@ -287,6 +287,7 @@ class UserOption(models.Model):
     x_temp = models.FloatField(blank=True, null=True)
     y_temp = models.FloatField(blank=True, null=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
+    is_disconnected = models.IntegerField()
 
     class Meta:
         #managed = False

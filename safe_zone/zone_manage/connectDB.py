@@ -8,22 +8,24 @@ from .models import SafeZone, User, ZoneLocation,UserOption,Location, InitSafeZo
 import numpy as np
 import requests
 
-
+#for testing
 def con_nect():
     User.objects.filter(id=1)
     return
 
 
+#just insert init_safe_zone_for_first_time
 def save_DB_old_vertex(new_uid,old_vertex):
     temp = User.objects.get(uid = new_uid)
     temp_t=[]
     for old in old_vertex:
         t = InitSafeZone(latitude=old[0], longitude=old[1], user_id= temp.id)
         temp_t.append(t)
-    InitSafeZone.objects.bulk_create(temp_t)
+    InitSafeZone.objects.bulk_create(temp_t) #for performance inhencement
     return
 
 
+#init_safe_zone is very big size for first time. we just slice them into very tiny boxes for management safe_zone. this part for manage our safe_zone in TTL(data policy)
 def save_recovery_ttl(new_uid,ttl):
     temp = User.objects.get(uid=new_uid)
     temp_t = []
@@ -34,9 +36,11 @@ def save_recovery_ttl(new_uid,ttl):
     return
 
 
-def save_DB_old_vertex_recovery(new_uid,old_vertex_recovery):#여기는 박스 전체를 저장하는, 그 user 최초recovery1 과 7일후 최초 recovery2에서 저장하는 거
+#init_safe_zone is very big size for first time. we just slice them into very tiny boxes for management safe_zone. this part for manage our safe_zone perbox
+#this old_vertex_recovery is not same with old_vertex. first one is dummy of perboxes. second one is first one when user draw safe_zone(initally)
+def save_DB_old_vertex_recovery(new_uid,old_vertex_recovery):
     te = User.objects.get(uid=new_uid)
-    temp = SafeZone.objects.filter(user_id=te.id).values_list('id',flat=True)   #temp에 idx가 다 담김
+    temp = SafeZone.objects.filter(user_id=te.id).values_list('id',flat=True)   #load all safe_zone_id for just one user_id
     temp_t = []
     count=-1
     #le = len(old_vertex_recovery)
@@ -128,6 +132,7 @@ def load_variable_DB(cache_uid):
     return user_ttl,per_box_size, sum_dist, count_t,temp_x, temp_y, start_section
 
 
+#this part is valuable for expand the scope of our safe_zone. we can expand the scope(per_box) just one in a time.
 def save_recovery_ttl_one(cache_uid,ttl_temp):
     temp = User.objects.get(uid=cache_uid)
     t = SafeZone(ttl = ttl_temp, user_id=temp.id)
@@ -135,7 +140,8 @@ def save_recovery_ttl_one(cache_uid,ttl_temp):
     return
 
 
-def save_DB_old_vertex_recovery_one(cache_uid,old_vertex_new):#여기는 safe_zone 확대시 박스 1개
+#when expanding the scope, upper one is for ttl, and here for safe_zone perbox
+def save_DB_old_vertex_recovery_one(cache_uid,old_vertex_new):
     te = User.objects.get(uid=cache_uid)
     temp = SafeZone.objects.filter(user_id=te.id).values_list('id', flat=True)
     print(len(temp))
@@ -181,7 +187,9 @@ def load_DB_all_vertex3(user_id):
 
 def delete_all_recovery_ttl(user_id):
     #temp = User.objects.get(uid=cache_uid)
-    SafeZone.objects.filter(user_id=user_id).delete()
+    temp = SafeZone.objects.filter(user_id=user_id)
+    temp.delete()
+    print('remain is ', len(temp))
     return
 
 
@@ -191,25 +199,29 @@ def delete_all_old_vertex_recovery(user_id):
     return
 
 
+#this part for delete ttl(when ttl expired). ttl is cascade for zone_location(perbox). so when we remove ttl, perbox which related that ttl_id will remove too
 def delete_ttl(user_id, old_vertex_delete):
     #temp = User.objects.get(uid=cache_uid)
+    count = 0
     while True:
-        count = 0
         t = SafeZone.objects.filter(user_id=user_id)
         print(len(t))
-        for idx in old_vertex_delete:
-            count += 1
-            SafeZone.objects.get(pk=t[idx].id).delete()
-            old_vertex_delete.remove(idx)
-            if count == 100: break
-        if len(old_vertex_delete) == 0: break
-    #for idx in old_vertex_delete:  #여기 삭제가 이상하다
+        SafeZone.objects.get(pk=t[old_vertex_delete[count]].id).delete()
+        count+=1
+        if count == len(old_vertex_delete): break
+        #for idx in old_vertex_delete:
+        #    count += 1
+        #    SafeZone.objects.get(pk=t[idx].id).delete()
+        #    old_vertex_delete.remove(idx)
+        #    if count == 100: break
+        #if len(old_vertex_delete) == 0: break
+    #for idx in old_vertex_delete:
     #    t[idx].delete()
     return
 
 
-def delete_DB_old_vertex_recovery(user_id, old_vertex_delete): #old_vertex_delete는 2차원 배열로 삭제할 perbox들 집합
-    #cascade로 될테니까 너무 걱정 말구
+#this code will be replaced in cascade. so do not use
+def delete_DB_old_vertex_recovery(user_id, old_vertex_delete):
     #temp = User.objects.get(uid=cache_uid)
     t = ZoneLocation.objects.filter(user_id=user_id)
     print(len(t))

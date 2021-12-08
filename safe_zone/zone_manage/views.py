@@ -1,12 +1,12 @@
 # Create your views here.
-import copy
+import copy,requests
 
 from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
 from django.utils.encoding import force_text
 from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.csrf import csrf_exempt
-from .models import SafeZone, User, ZoneLocation,UserOption,Location, InitSafeZone ,VisitOften
+from .models import SafeZone, User, ZoneLocation,UserOption,Location, InitSafeZone ,VisitOften, PredictionLocation
 from .serializers import InitSafeZoneSer
 from rest_framework.parsers import JSONParser
 from . import connectDB, constants, vertify, util
@@ -42,12 +42,15 @@ def connect(request):
     return JsonResponse(data1, safe=False)
 
 
+#this part for checking  minimum size of user safe zone first time
 @csrf_exempt
 def Init_SafeZone(request):
     return_status = 204;success = False
     if request.method == 'POST':
+        #we use JWT for authentication all user.
         auth_token = request.headers.get("AccessToken", None)
-        if auth_token == None:# 토큰 값이 아예 안 들어왔을 때 401 코드 처리 및 메시지 출력
+        #when user does not have token, we response with 401
+        if auth_token == None:
             return JsonResponse({'message': 'Enter the token.'}, status=401)
         '''
         padded = auth_token + "=" * divmod(len(auth_token), 4)[1]
@@ -60,7 +63,7 @@ def Init_SafeZone(request):
             if count == 8: cache_i2=i;break
         constants.new_uid = jsonbyte[cache_i1+2:cache_i2].decode('utf-8')
         '''
-        # 받은 토큰 디코딩해서 user id 정보 출력하기
+        # decoding the token for get user uid
         jwt_options = {
             'verify_signature': False,
             'verify_exp': True,
@@ -73,15 +76,14 @@ def Init_SafeZone(request):
             jsondata = jwt.decode(auth_token, 'dkwndnlemal123!', algorithms=['HS256'], options=jwt_options)
         except:
             return JsonResponse({'message': 'token expired.'}, status=401)
+        print(str(jsondata['sub']))
         #constants.new_uid =str(jsondata['sub'])
         data = JSONParser().parse(request)
-
         #constants.old_vertex, constants.new_uid =[tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))], uid #str(uid)
-        constants.old_vertex = [tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))]
-        stat, total_max_x, total_min_y = vertify.zone_min_size(constants.old_vertex) #여기까지가 20ms
+        old_vertex = [tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))]
+        stat, total_max_x, total_min_y = vertify.zone_min_size(old_vertex) #여기까지가 20ms
 
-        if stat == 1:  # 여기는 임시 변수만 사용하기.(새로운 유저들이 각자꺼만 저장해야하므로)
-            #1101#geodjango => 950개 recovery, 여기 =>1406 . 또한 y,x로 되어있는데 x,y로 바꿔서 안돌리고 그냥 그대로 + 배열 reverse안하고 그냥 그대로 돌려도 잘 나옴
+        if stat == 1:
             '''
             old_vertex_recovery=[];ttl=[]
             print("start the init process")
@@ -105,26 +107,31 @@ def Init_SafeZone(request):
         return JsonResponse(data1, safe=False)
 
 
+#we disunite our safe zone checking section and insert section. here for insert
 @csrf_exempt
 def put(request):
     print("start the init process")
     old_vertex_recovery = [];    ttl = []
     data = JSONParser().parse(request)
 
-    constants.new_uid = data['uid']
+    new_uid = data['uid']
 
-    constants.old_vertex = [tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))]
-    print(constants.new_uid)
-    print(constants.old_vertex)
-    stat, total_max_x, total_min_y = vertify.zone_min_size(constants.old_vertex)
-    constants.temp_x, constants.temp_y, old_vertex_recovery, ttl = util.start_perbox(constants.old_vertex,old_vertex_recovery,constants.per_box_size, ttl)
-    constants.user_ttl = util.start_with_user_vertex(constants.user_ttl)
-    old_vertex_recovery, ttl = util.perbox_process(constants.old_vertex, old_vertex_recovery, ttl)
+    old_vertex = [tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))]
+    print(new_uid)
+    #print(constants.old_vertex)
+    stat, total_max_x, total_min_y = vertify.zone_min_size(old_vertex)
+
+    #just make the hole square including all safe_zone vertices
+    temp_x, temp_y, old_vertex_recovery, ttl = util.start_perbox(old_vertex,old_vertex_recovery,100.0, ttl)
+    #user_ttl = util.start_with_user_vertex(constants.user_ttl)
+
+    #and we renewing the square for checking inside of safe zone or remove other
+    old_vertex_recovery, ttl = util.perbox_process(old_vertex, old_vertex_recovery, ttl)
     print(len(old_vertex_recovery))  # 여기까지가 346ms
-    connectDB.save_DB_old_vertex(constants.new_uid, constants.old_vertex)
-    connectDB.save_recovery_ttl(constants.new_uid, ttl)
-    connectDB.save_DB_old_vertex_recovery(constants.new_uid, old_vertex_recovery)
-    connectDB.save_user_ttl(constants.new_uid, constants.user_ttl, total_max_x,total_min_y)  # 여기까지(recovery 5천개 넣는거 빼고)가 816ms
+    connectDB.save_DB_old_vertex(new_uid, old_vertex)
+    connectDB.save_recovery_ttl(new_uid, ttl)
+    connectDB.save_DB_old_vertex_recovery(new_uid, old_vertex_recovery)
+    connectDB.save_user_ttl(new_uid, constants.user_ttl, total_max_x,total_min_y)  # 여기까지(recovery 5천개 넣는거 빼고)가 816ms
     return_status = 201;    success = True;    stat = {"temp_x": total_max_x, "temp_y": total_min_y}
     data1 = {
         "success": success,
@@ -135,13 +142,16 @@ def put(request):
     return JsonResponse(data1, safe=False)
 
 
+#and then, checking GPS data for all user periodically every 5 seconds
 @csrf_exempt
 def location_test(request):
     return_status = 204;success = False
 
     if request.method == 'POST':
+        # we use JWT for authentication all user.
         auth_token = request.headers.get("AccessToken", None)
-        if auth_token == None:  # 토큰 값이 아예 안 들어왔을 때 401 코드 처리 및 메시지 출력
+        # when user does not have token, we response with 401
+        if auth_token == None:
             return JsonResponse({'message': 'Enter the token.'}, status=401)
         '''
         padded = auth_token + "=" * divmod(len(auth_token), 4)[1]
@@ -154,7 +164,7 @@ def location_test(request):
             if count == 8: cache_i2=i;break
         constants.new_uid = jsonbyte[cache_i1+2:cache_i2].decode('utf-8')
         '''
-        # 받은 토큰 디코딩해서 user id 정보 출력하기
+        # decoding the token for get user uid
         jwt_options = {
             'verify_signature': False,
             'verify_exp': True,
@@ -167,92 +177,96 @@ def location_test(request):
             jsondata = jwt.decode(auth_token, 'dkwndnlemal123!', algorithms=['HS256'], options=jwt_options)
         except:
             return JsonResponse({'message': 'token expired.'}, status=401)
-        constants.new_uid =str(jsondata['sub'])
+        new_uid =str(jsondata['sub'])
 
         data = JSONParser().parse(request)
-        constants.new_data = tuple([data['latitude'] , data['longitude']])
+        new_data = tuple([data['latitude'] , data['longitude']])
 
-        if (constants.cache_uid == constants.new_uid and ((abs(constants.new_data[0] - constants.prev_data[0]) < 0.00001 and abs(constants.new_data[1] - constants.prev_data[1] < 0.00001)))):
+
+        #we check this special case for twice. first in here, and second in MYSQL DB
+        #user can stay same area(cafe or school class room etc). when insert same GPS data many time like this situations, we can not check precise user speed
+        if (constants.cache_uid == new_uid and ((abs(new_data[0] - constants.prev_data[0]) < 0.00001 and abs(new_data[1] - constants.prev_data[1] < 0.00001)))):
             print('same user: prev_data and new_data are too close');success = True
+            #print('-------------uid: ', new_uid, '-------------')
+            #print('-------------', [data['latitude'], data['longitude']], '-------------')
             data1 = {
                 "success": success,
                 "status": return_status,
                 "data": 1
             }
             return JsonResponse(data1, safe=False)
-
-        constants.ttl = connectDB.load_recovery_ttl(constants.new_uid)
-        if (constants.cache_uid != constants.new_uid):#type(constants.ttl)==queryset , type(constants.old_vertex_recovery)=list
-            print("user has been changed")
-            if constants.cache_uid != 0:
-                connectDB.save_variable_DB(constants.cache_uid, constants.per_box_size, constants.sum_dist, constants.count_t, constants.temp_x, constants.temp_y, constants.start_section)
-            constants.cache_uid = constants.new_uid
-            #ttl은 queryset형태. 파이썬 내부에서 수정 못하고 DB에 접근해서 수정해야함
-            constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(constants.new_uid)
-            constants.user_ttl, constants.per_box_size, constants.sum_dist, constants.count_t,constants.temp_x, constants.temp_y, constants.start_section = connectDB.load_variable_DB(constants.new_uid)
-        safe_move=0
-        us = User.objects.get(uid=constants.cache_uid)
+        ttl=[];old_vertex_recovery=[]; user_ttl=0;safe_move=0
+        ttl = connectDB.load_recovery_ttl(new_uid)
+        constants.cache_uid = new_uid
+        old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(new_uid)
+        user_ttl, per_box_size, sum_dist, count_t, temp_x, temp_y, start_section = connectDB.load_variable_DB(new_uid)
+        us = User.objects.get(uid=new_uid)
         u = UserOption.objects.get(user_id=us.id)
         if u.safe_move == 1: safe_move=1
 
         print("user started process: ", datetime.now())
-        # user ttl type check please###
-        t = str(constants.user_ttl).split(' ')[0].split('-')  # old_vertex[-1].split('-')
+        # we use user created time for check before 7 days or another
+        t = str(user_ttl).split(' ')[0].split('-')  # old_vertex[-1].split('-')
         zone_mature_time = str(datetime.now() - datetime(int(t[0]), int(t[1]), int(t[2]))).split(' ')[0]
-        # 이때 2021-10-02 - 2021-10-02가 되면(1일째의 경우) 시간만 남으므로 이때는 0으로 str처리해주기
+        # when calculate 2021-10-02 - 2021-10-02 result is remain __:__:__ (just time, not day), so we setting this variable for 0(str)
         if zone_mature_time.find(':'): zone_mature_time = '0'
 
-        #zone_mature_time='8'#지울거
+        #zone_mature_time='8'#for testing
         sendData = 0;status_sub = 0
-        if (zone_mature_time <= '7'):  # use old_vertex #확대확대만 된다!: recovery배열을 보내줘야함 211002 => 2번검증하기!
+        if (zone_mature_time <= '7'):
             print('user zone_mature_time is lower than 7')
-            status_sub, old_vertex_new = vertify.check_data_sub2(constants.new_data, constants.old_vertex_recovery, status_sub)
+            status_sub, old_vertex_new = vertify.check_data_sub2(new_data, old_vertex_recovery, status_sub)
 
             if (status_sub == 1):  print('you are in safe_zone');sendData = 1;return_status=201;success=True
             elif (status_sub == 2):  # if totally outside, ⇒ rebuild safe_zone
                 print('warning: you are location out of safe_zone')
                 ttl_temp = 0
-                old_vertex_new, ttl_temp = vertify.start_perbox_add(old_vertex_new, constants.new_data,constants.temp_x, constants.temp_y,constants.per_box_size, ttl_temp)
-                constants.old_vertex_recovery.append(old_vertex_new)
-                connectDB.save_recovery_ttl_one(constants.cache_uid, ttl_temp)
-                connectDB.save_DB_old_vertex_recovery_one(constants.cache_uid, old_vertex_new)
+                old_vertex_new, ttl_temp = vertify.start_perbox_add(old_vertex_new, new_data,temp_x, temp_y,per_box_size, ttl_temp)
+                old_vertex_recovery.append(old_vertex_new)
+                connectDB.save_recovery_ttl_one(new_uid, ttl_temp)
+                connectDB.save_DB_old_vertex_recovery_one(new_uid, old_vertex_new)
                 sendData = 2;return_status=201;success=True#old_vertex_new
 
 
         else:  # USE old_vertex_recovery
-            status,constants.ttl = vertify.check_data_main(constants.new_data, constants.old_vertex_recovery, constants.status, constants.ttl, constants.cache_uid)
+            status=0
+            status,ttl = vertify.check_data_main(new_data, old_vertex_recovery, status, ttl, new_uid)
             sendData=1
             if (status == 1): print('you are in safe_zone');return_status=201;success=True
             elif (status == 2):
                 print('warning: you are location out of safe_zone')# if outside ⇒ rebuild safe_zone
                 old_vertex_new=0; ttl_temp=0
-                old_vertex_new, ttl_temp = vertify.safe_zone_process(old_vertex_new,constants.new_data, constants.temp_x, constants.temp_y, constants.per_box_size,ttl_temp)
-                constants.old_vertex_recovery.append(old_vertex_new)
-                connectDB.save_recovery_ttl_one(constants.cache_uid, ttl_temp)
-                connectDB.save_DB_old_vertex_recovery_one(constants.cache_uid, old_vertex_new)
+                old_vertex_new, ttl_temp = vertify.safe_zone_process(old_vertex_new,new_data, temp_x, temp_y, per_box_size,ttl_temp)
+                old_vertex_recovery.append(old_vertex_new)
+                connectDB.save_recovery_ttl_one(new_uid, ttl_temp)
+                connectDB.save_DB_old_vertex_recovery_one(new_uid, old_vertex_new)
                 sendData=2;return_status=201;success=True
+        connectDB.save_variable_DB(new_uid, per_box_size, sum_dist, count_t,temp_x, temp_y, start_section)
 
-        constants.prev_data = constants.new_data
+        constants.prev_data = new_data
         if safe_move == 1: sendData=1
         data1 = {
             "success": success,
             "status": return_status,
             "data": sendData
         }
+        #print('-------------uid: ', new_uid, '-------sendData: ',sendData)
+        #print('-------------', [data['latitude'], data['longitude']], '-------------')
+
         return JsonResponse(data1, safe=False)
 
 
 @csrf_exempt
-def test_for_location(request):
+def test_for_location(request,uid):
     #위에서 얻어온 constants.new_uid를 기반으로
     temp_t=[]
-    constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery('ed4dba6f-cdd7-406e-8920-fe7d9afb62b8')#(constants.new_uid)
+    constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(uid)#('ed4dba6f-cdd7-406e-8920-fe7d9afb62b8')#(constants.new_uid)
     local_tz = pytz.timezone("Asia/Seoul")
     converted_utc_dt = datetime.now() - timedelta(days=3)
     ttl = pytz.utc.localize(converted_utc_dt).astimezone(local_tz)
     print(ttl)
-    te=User.objects.get(uid='ed4dba6f-cdd7-406e-8920-fe7d9afb62b8')#(uid=constants.new_uid)
-
+    te=User.objects.get(uid=uid)#(uid=constants.new_uid)
+    print('id is ', te.id)
     for old in constants.old_vertex_recovery:
         x = (old[0][0]+old[3][0])/2;y = (old[0][1]+old[1][1])/2
         ttl = ttl + timedelta(seconds=10)
@@ -285,10 +299,11 @@ def test_for_location(request):
 
 
 @csrf_exempt
-def con_test11(request):
+def update_safe_zone(request):
     constants.cache_uid = 0
     print('shceduler update_safe_zone after Day 7')
-    # 먼저 최소 size 검증을 진행하기 위해서 all_vertex를 DB에서 load
+    # access DB for loading all vertex, because of checking minimum size of safe_zone.
+    # when is_init_safe_zone flag is 0, we can start this part(if not 0, your are pass this part before)
     a = UserOption.objects.filter(is_init_safe_zone__lt=1)
     print(len(a))
 
@@ -296,30 +311,33 @@ def con_test11(request):
         temp = User.objects.get(id=a[i].user_id)
         uid = temp.uid
         t = str(temp.created_at).split(' ')[0].split('-')
-        cloc = str(datetime.now() -datetime(int(t[0]), int(t[1]), int(t[2]))).split(' ')[0]
+        cloc = str(datetime.now() - datetime(int(t[0]), int(t[1]), int(t[2]))).split(' ')[0]
 
-        #if cloc <= '7' or cloc.find(':') != -1: continue
+        #you can enter here when you create your user before 7 days. check the date is correct, and processing next step
+        if cloc <= '7' or cloc.find(':') != -1: continue
 
         all_vertex = []
-        all_vertex, constants.per_box_size, constants.sum_dist, constants.count_t = connectDB.load_DB_all_vertex(a[i].user_id)  # 8만개 data 효택 DB에서 load, 평균속도도 load
-        constants.per_box_size = 100
-        #constants.per_box_size = (constants.sum_dist / constants.count_t) * 90
+        all_vertex, per_box_size, sum_dist, count_t = connectDB.load_DB_all_vertex(a[i].user_id)
+
+        #we created per_box_size for all user's dynamic size. but, in initial model, we keep this variable fixed.
+        per_box_size = 100
+        # per_box_size = (constants.sum_dist / constants.count_t) * 90
         if len(all_vertex) == 0: continue
+        #check zone minimum size is very important because of reducing the error of user life radius.
         stat, total_max_x, total_min_y = vertify.zone_min_size(all_vertex)
+        print('result is ',stat)
 
         if stat != 1: continue
-        constants.old_vertex_recovery = [];constants.ttl = []
-        constants.start_section = 1  # 8일이라고 8일에 갑자기 100회 이거 진행하는거 아니자나. 8일되었을때라도 딱 한번만 진행되어야하자나
-        constants.temp_x, constants.temp_y, constants.old_vertex_recovery, constants.ttl = util.personal_box_first_time(
-            constants.old_vertex_recovery, all_vertex, constants.per_box_size, constants.ttl, uid)
+        old_vertex_recovery = [];        ttl = []
+        # if you pass all checking session, you can enter renewing all safezone perboxes step. so setting is_init_safe_zone =1
+        start_section = 1
+        temp_x, temp_y, old_vertex_recovery, ttl = util.personal_box_first_time(old_vertex_recovery, all_vertex, per_box_size, ttl, uid)
 
         print('user safe_zone update')
         connectDB.delete_all_recovery_ttl(a[i].user_id)
-        #connectDB.delete_all_old_vertex_recovery(a[i].user_id)
-        connectDB.save_recovery_ttl(uid, constants.ttl)
-        connectDB.save_DB_old_vertex_recovery(uid, constants.old_vertex_recovery)
-        connectDB.save_variable_DB(uid, constants.per_box_size, constants.sum_dist, constants.count_t,
-                                   constants.temp_x, constants.temp_y, constants.start_section)
+        connectDB.save_recovery_ttl(uid, ttl)
+        connectDB.save_DB_old_vertex_recovery(uid, old_vertex_recovery)
+        connectDB.save_variable_DB(uid, per_box_size, sum_dist, count_t,temp_x, temp_y, start_section)
     data1 = {
         "success": 201,
         "status": True,
@@ -329,22 +347,24 @@ def con_test11(request):
 
 
 @csrf_exempt
-def con_test22(request):
+def delete_expire_ttl(request):
     constants.cache_uid = 0
     print('shceduler delete_expire_ttl after Day 7')
+    #you can enter this session when is_init_safe_zone variable = 1. that means the user are created after day 7.
+    #so they are ready for delete expired ttl
     a = UserOption.objects.filter(is_init_safe_zone__gt=0)
     print(len(a))
 
     for i in range(len(a)):
+        ttl=[];old_vertex_recovery=[]
         # if a[i].is_init_safe_zone != 1: continue
         uid = User.objects.get(id=a[i].user_id).uid
-        constants.ttl = connectDB.load_recovery_ttl(uid)
-        constants.old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(uid)
-        constants.temp_x, constants.temp_y, constants.old_vertex_recovery, constants.ttl = util.personal_box_recovery_all_users(
-            a[i].user_id, constants.old_vertex_recovery, constants.ttl)
-        connectDB.save_variable_DB(uid, a[i].box_size, a[i].distance, a[i].time, constants.temp_x,
-                                   constants.temp_y, a[i].is_init_safe_zone)
-        # frontend에서는, 어차피 낮에 활동할때 바뀐 safe_zone에 대해서 내부외부 검증하고, 외부면 safe_zone 가져와서 그리므로, 따로 signal 안 보내줘도 괜찮음
+        ttl = connectDB.load_recovery_ttl(uid)
+        old_vertex_recovery = connectDB.load_DB_old_vertex_recovery(uid)
+        temp_x, temp_y, old_vertex_recovery, ttl = util.personal_box_recovery_all_users(a[i].user_id, old_vertex_recovery, ttl)
+        connectDB.save_variable_DB(uid, a[i].box_size, a[i].distance, a[i].time, temp_x,temp_y, a[i].is_init_safe_zone)
+
+
     data1 = {
         "success": 201,
         "status": True,
@@ -360,7 +380,7 @@ def for_predict_test(request):
     temp_final = [[] for i in range(len(temp_id))]
     print(len(temp_id))
 
-    old_vertex_recovery = connectDB.load_DB_old_vertex_recovery('ed4dba6f-cdd7-406e-8920-fe7d9afb62b8')
+    old_vertex_recovery = connectDB.load_DB_old_vertex_recovery('4fd5da53-2181-40c8-a31c-30785de3c5d1')
     local_tz = pytz.timezone("Asia/Seoul")
     ttl=[];converted_utc_dt = timezone.now()
     for i in range(30):
@@ -442,22 +462,6 @@ def create_check(request,id):
 
 
 @csrf_exempt
-def test(request):
-    data=dict()
-    temp=[]
-    temp=connectDB.load_DB_old_vertex_recovery('ed4dba6f-cdd7-406e-8920-fe7d9afb62b8')
-    result = sum(temp, [])
-    dict_value = [{"latitude": result[i][0], "longitude": result[i][1]} for i in range(len(result))]
-    data['all_vertex'] = dict_value
-    res_data = {
-        "success": 201,
-        "status": True,
-        "data": data
-    }
-    return JsonResponse(res_data, safe=False)
-
-
-@csrf_exempt
 def visit_often(request,id):#여기로 요청이 들어온다는건, 기존이 해당 id로 된 data가 VisitOften테이블에 있으면 안된다는거!!!
     data=dict()
     temp = User.objects.all()
@@ -504,3 +508,94 @@ def visit_often_put(request,id):
         "data": 1
     }
     return JsonResponse(res_data, safe=False)
+
+
+@csrf_exempt
+def make_model(request,id):
+    data = dict()
+    temp = User.objects.all()
+    print(len(temp))
+    if len(temp) == 0:
+        data = 2
+    else:
+        te = connectDB.load_DB_all_vertex3(temp[id].id)
+        if te['all_vertex'] == 2:
+            data = 2
+        else:
+            data['id'] = temp[id].id
+            data['gps'] = te
+    res_data = {
+        "success": 201,
+        "status": True,
+        "data": data
+    }
+    return JsonResponse(res_data, safe=False)
+
+
+@csrf_exempt
+def search_for_prediction(request,id):
+    # you are in crontab
+    # you save prediction boxes in mysql prediction_location_table
+    temp = User.objects.all()
+    print(len(temp))
+    if len(temp) == 0:
+        data = 2
+    else:
+        for i in range(len(temp)):
+            try:
+                t = UserOption.objects.get(user_id=temp[i].id)
+            except:
+                print('that user are error about something')
+                continue
+            if t.is_disconnected:
+                find_xy = Location.objects.filter(user_id=temp[i].id)
+                if len(find_xy) < 1: continue
+                find_x=find_xy[len(find_xy)-1].latitude
+                find_y=find_xy[len(find_xy)-1].longitude
+
+                res0 = requests.get('http://3.37.163.203:8040/zone_manage/certify_make_model/' + str(i) + '/')
+                re0 = res0.json()
+                temp_t = re0['data']
+                if temp_t == 2:  continue  # 예외처리
+
+                URL = 'http://3.37.163.203:8080/prediction/certify_predict/'+str(temp[i].id)+'/?username=withmeuser&password=adminuser'
+                req_data = {'temp':{'temp_x': t.x_temp, 'temp_y': t.y_temp}, 'last':{'last_x':find_x, 'last_y':find_y,}, 'data_train': temp_t['gps']}
+                res = requests.post(URL, data=json.dumps(req_data))
+                re = res.json()
+                te = re['data']
+                if te == 2:  continue
+
+                else:
+                    temp_t=[]
+                    local_tz = pytz.timezone("Asia/Seoul")
+                    converted_utc_dt = datetime.now()
+                    tt = pytz.utc.localize(converted_utc_dt).astimezone(local_tz)
+                    Location(created_at=tt, latitude=re['predict']['latitude'], longitude=re['predict']['longitude'], user_id=temp[i].id).save()
+                    data_value = [tuple(te[k].values()) for k in range(len(te))]
+                    temp_t.extend([PredictionLocation(latitude=old[0], longitude=old[1], user_id=temp[i].id) for old in data_value])
+                    PredictionLocation.objects.bulk_create(temp_t, batch_size=999)
+
+    res_data = {
+        "success": 201,
+        "status": True,
+        "data": 1
+    }
+    return JsonResponse(res_data, safe=False)
+
+
+@csrf_exempt
+def test(request):
+    data={}
+    latitude = PredictionLocation.objects.filter(user_id=87).values_list('latitude', flat=True)
+    longitude = PredictionLocation.objects.filter(user_id=87).values_list('longitude', flat=True)
+    print(len(latitude), len(longitude))
+    dict_value = [{"latitude": latitude[i], "longitude": longitude[i]} for i in range(len(latitude))]
+    dictionary = {"all_vertex": dict_value}
+    data['gps'] = dictionary
+    res_data = {
+        "success": 201,
+        "status": True,
+        "data": data
+    }
+    return JsonResponse(res_data, safe=False)
+

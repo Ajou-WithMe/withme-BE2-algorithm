@@ -35,10 +35,10 @@ def start_perbox(old_vertex,old_vertex_recovery,per_box_size,ttl):
             if (t_y >= total_max_y): break
             temp = []
             t_xx = round(t_x,digit);t_yy = round(t_y,digit);t_xx_per = round(t_x - per_box,digit);t_yy_per = round(t_y + per_box,digit)
-            temp.append((t_xx, t_yy))
-            temp.append((t_xx, t_yy_per))
-            temp.append((t_xx_per, t_yy_per))
-            temp.append((t_xx_per, t_yy))
+            temp.append((t_x, t_y))
+            temp.append((t_x, t_y + per_box))
+            temp.append((t_x - per_box, t_y + per_box))
+            temp.append((t_x - per_box, t_y))
             ttl.append(tt)#temp.append(0) #old_vertex에 포함되어있지 않다는 소리!!!!
             #ttl.append(0)
             old_vertex_recovery.append(temp)
@@ -95,6 +95,7 @@ def personal_box_recoverying(temp_x,temp_y,per_box_size,c_count,coordi_sort1 , o
         if status == 1:
             temp_t.append(id)
 
+    temp_t=list(set(temp_t))
     ttl = [ttl_t]*len(temp_t)
     print(len(temp_t))
     old_vertex_recovery_new=[]
@@ -119,10 +120,10 @@ def personal_box_first_time(old_vertex_recovery, all_vertex, per_box_size,ttl,ca
             if (t_y >= total_max_y): break
             temp = []
             t_xx = round(t_x, digit);t_yy = round(t_y, digit);t_xx_per = round(t_x - per_box, digit);t_yy_per = round(t_y + per_box, digit)
-            temp.append((t_xx, t_yy))
-            temp.append((t_xx, t_yy_per))
-            temp.append((t_xx_per, t_yy_per))
-            temp.append((t_xx_per, t_yy))
+            temp.append((t_x, t_y))
+            temp.append((t_x, t_y + per_box))
+            temp.append((t_x - per_box, t_y + per_box))
+            temp.append((t_x - per_box, t_y))
             ttl.append('0')
             old_vertex_recovery.append(temp)
             t_y = t_y + per_box
@@ -136,7 +137,7 @@ def personal_box_first_time(old_vertex_recovery, all_vertex, per_box_size,ttl,ca
 
 
 def personal_box_recovery_all_users(user_id,old_vertex_recovery,ttl):
-    temp=[]
+    temp=[];temp_t=[];count=0
     #old = np.array(old_vertex_recovery).flatten().tolist()
     old = sum(old_vertex_recovery, [])
 
@@ -144,13 +145,19 @@ def personal_box_recovery_all_users(user_id,old_vertex_recovery,ttl):
         t = str(ttl[old_vertex_recovery.index(zone)]).split(' ')[0].split('-')
         cloc= str(datetime.now() - datetime(int(t[0]), int(t[1]), int(t[2]))).split(' ')[0]
         if cloc > '0' or cloc.find(':')!=-1:
-            stat, total_max_x, total_min_y = vertify.zone_min_size(old)
-            if stat != 1: break
-            temp.append(old_vertex_recovery.index(zone))
+            count+=1
+            if count % 50 == 0:
+                stat, total_max_x, total_min_y = vertify.zone_min_size(old)
+                if stat != 1: break
+                else:
+                    temp.extend(copy.deepcopy(temp_t))
+                    temp_t.clear()
+
+            temp_t.append(old_vertex_recovery.index(zone))
             for z in zone:
                 old.remove(z)
 
-    print(len(temp), 'will be removed')
+    print(len(temp), 'will be removed in',user_id)
 
     temp.sort(reverse = True)  #뒤에 index 부터 지우게
     if len(temp) != 0:
