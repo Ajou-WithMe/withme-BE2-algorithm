@@ -1,3 +1,10 @@
+"""
+made by BaekJongSeong
+notice: do not use global constants
+warning: if we use global for this project, Conflicts happen almost at any moment
+"""
+
+
 global count_t
 count_t = 0 #3초가 몇번 지났는지
 global TIME_INTVL

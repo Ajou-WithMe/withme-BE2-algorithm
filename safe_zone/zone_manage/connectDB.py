@@ -1,12 +1,20 @@
-#종성 효택, spring 프레임워크 기반 DB 내용
+"""
+made by BaekJongSeong
+here for connection with database (AWS RDS)
+
+we connect mysql for this project
+django & spring framework both of them access mysql, and modify each part
+all CRUD have to access User table to get user_id or uid.
+=> every def function start with this code.
+some CRUD is replaced for performance inhencement
+"""
+
 
 import sqlite3, io, os, copy
 #import django
 #os.environ.setdefault("DJANGO_SETTINGS_MODULE", "safe_zone.settings")
 #django.setup()
 from .models import SafeZone, User, ZoneLocation,UserOption,Location, InitSafeZone
-import numpy as np
-import requests
 
 #for testing
 def con_nect():
@@ -14,7 +22,7 @@ def con_nect():
     return
 
 
-#just insert init_safe_zone_for_first_time
+#just insert init_safe_zone_for_first_time: InitSafeZone Table
 def save_DB_old_vertex(new_uid,old_vertex):
     temp = User.objects.get(uid = new_uid)
     temp_t=[]
@@ -25,22 +33,26 @@ def save_DB_old_vertex(new_uid,old_vertex):
     return
 
 
-#init_safe_zone is very big size for first time. we just slice them into very tiny boxes for management safe_zone. this part for manage our safe_zone in TTL(data policy)
+#init_safe_zone table: very big size (just one segment (whole)) for first time.
+# we just slice them into very tiny boxes for management safe_zone. this part for manage our safe_zone in TTL(data policy)
 def save_recovery_ttl(new_uid,ttl):
     temp = User.objects.get(uid=new_uid)
     temp_t = []
     for old in ttl:
         t = SafeZone(ttl = old, user_id= temp.id)
         temp_t.append(t)
-    SafeZone.objects.bulk_create(temp_t, batch_size=999)
+    SafeZone.objects.bulk_create(temp_t, batch_size=999) #for performance inhencement
     return
 
 
-#init_safe_zone is very big size for first time. we just slice them into very tiny boxes for management safe_zone. this part for manage our safe_zone perbox
-#this old_vertex_recovery is not same with old_vertex. first one is dummy of perboxes. second one is first one when user draw safe_zone(initally)
+#init_safe_zone is very big size for first time.
+# we just slice them into very tiny boxes for management safe_zone. this part for manage our safe_zone perbox
+#this old_vertex_recovery is not same with old_vertex.
+# first one is dummy of perboxes. second one is first one when user draw safe_zone(initally)
 def save_DB_old_vertex_recovery(new_uid,old_vertex_recovery):
     te = User.objects.get(uid=new_uid)
-    temp = SafeZone.objects.filter(user_id=te.id).values_list('id',flat=True)   #load all safe_zone_id for just one user_id
+    # load all safe_zone_id for just one user_id
+    temp = SafeZone.objects.filter(user_id=te.id).values_list('id',flat=True)
     temp_t = []
     count=-1
     #le = len(old_vertex_recovery)
@@ -53,8 +65,6 @@ def save_DB_old_vertex_recovery(new_uid,old_vertex_recovery):
     for old_vertex in old_vertex_recovery:
         count += 1
         temp_t.extend([ZoneLocation(latitude=old[0], longitude=old[1], user_id=te.id,safe_zone_id=temp[count]) for old in old_vertex])
-    #for i in range(le):
-    #    temp_t.extend([ZoneLocation(latitude=old_vertex_recovery[i][j][0],longitude=old_vertex_recovery[i][j][1],user_id=te.id, safe_zone_id=temp[i]) for j in range(4)])
     print(len(temp_t))
     ZoneLocation.objects.bulk_create(temp_t, batch_size=999)
     #for i in range(0, 4 * le, 4):
@@ -67,12 +77,12 @@ def save_DB_old_vertex_recovery(new_uid,old_vertex_recovery):
     return
 
 
+# point: we save useroption table before using this function
+# so we just modify data and resave it
 def save_user_ttl(new_uid, user_ttl,x_temp,y_temp):
     temp = User.objects.get(uid=new_uid)
-    #temp.created_at = user_ttl
     t = UserOption.objects.get(user_id=temp.id)
     t.box_size, t.is_init_safe_zone, t.x_temp, t.y_temp = 100.0, 0, x_temp, y_temp
-    #temp.save()
     t.save()
     return
 
@@ -81,16 +91,9 @@ def save_variable_DB(cache_uid,per_box_size, sum_dist, count_t,temp_x, temp_y, s
     temp = User.objects.get(uid=cache_uid)
     t = UserOption.objects.get(user_id=temp.id)
     t.box_size, t.is_init_safe_zone, t.x_temp, t.y_temp= per_box_size,start_section,temp_x,temp_y
-    #t = UserOption(box_size= per_box_size, is_init_safe_zone=start_section, x_temp=temp_x,y_temp=temp_y,user_id=temp.id)
     t.save()
     return
 
-'''
-def load_user_ttl(cache_uid):
-    temp = User.objects.get(uid=cache_uid)
-    t = InitSafeZone.objects.filter(user_id=temp.id)
-    return t[0].created_at
-'''
 
 def load_recovery_ttl(cache_uid):
     temp = User.objects.get(uid=cache_uid)
@@ -99,23 +102,24 @@ def load_recovery_ttl(cache_uid):
     return t
 
 
+# we just slice safe_zone into very tiny boxes for management safe_zone.
+#we load all perbox into old_vertex_recovery var
 def load_DB_old_vertex_recovery(cache_uid):
     te = User.objects.get(uid=cache_uid)
-    #temp = ZoneLocation.objects.filter(user_id=te.id)
-    #latitude = temp.values_list('latitude', flat=True)
-    #longitude = temp.values_list('longitude', flat=True)
-    #temp = User.objects.get(uid=cache_uid)
     latitude = ZoneLocation.objects.filter(user_id=te.id).values_list('latitude', flat=True)
     longitude = ZoneLocation.objects.filter(user_id=te.id).values_list('longitude', flat=True)
+    # the latitude and longitude both are list type
     list_t=[]
     ls=[]
     count=0
 
     print(len(latitude),len(longitude))
 
+    # we have to make 2-dimension list for vertify inside / outside of safe_zone
     for i in range(len(latitude)):
         ls.append(tuple([latitude[i],longitude[i]]))
         count+=1
+        # so we add this code(slice it) to make 2-dim list
         if count==4:
             list_t.append(copy.deepcopy(ls))
             ls.clear()
@@ -127,12 +131,12 @@ def load_variable_DB(cache_uid):
     temp = User.objects.get(uid=cache_uid)
     user_ttl = temp.created_at
     t = UserOption.objects.get(user_id = temp.id)
-
     per_box_size, sum_dist, count_t, temp_x, temp_y, start_section = t.box_size, t.distance,t.time, t.x_temp, t.y_temp, t.is_init_safe_zone
     return user_ttl,per_box_size, sum_dist, count_t,temp_x, temp_y, start_section
 
 
-#this part is valuable for expand the scope of our safe_zone. we can expand the scope(per_box) just one in a time.
+#this part is valuable for expand the scope of our safe_zone.
+# we can expand the scope(per_box) just one in a time.
 def save_recovery_ttl_one(cache_uid,ttl_temp):
     temp = User.objects.get(uid=cache_uid)
     t = SafeZone(ttl = ttl_temp, user_id=temp.id)
@@ -199,7 +203,9 @@ def delete_all_old_vertex_recovery(user_id):
     return
 
 
-#this part for delete ttl(when ttl expired). ttl is cascade for zone_location(perbox). so when we remove ttl, perbox which related that ttl_id will remove too
+#this part for delete ttl(when ttl expired).
+# ttl is cascade for zone_location(perbox).
+# so when we remove ttl, perbox which related that ttl_id will remove too
 def delete_ttl(user_id, old_vertex_delete):
     #temp = User.objects.get(uid=cache_uid)
     count = 0
@@ -239,38 +245,4 @@ def save_recovery_ttl_mod(cache_uid,value, ttl_temp):
     t[ttl_temp].save()
     return
 
-'''
-def save_snapshot_DB(cache_uid):
-    # nd.array to text  when Insert DB, 아래 conn의 첫번째 인자는 db_name
-    # + executeUpdate == modify
-    def adapt_array(arr):
-        out = io.BytesIO()
-        np.save(out, arr)
-        out.seek(0)
-        return sqlite3.Binary(out.read())
-    conn = sqlite3.connect('data', detect_types=sqlite3.PARSE_DECLTYPES)
-    sqlite3.register_adapter(np.ndarray, adapt_array)
-    return
-
-def load_snapshot_DB(new_uid, text):
-    # conn으로 DB 연결 + executeQuery == retrieve
-    def convert_array(text):
-        out = io.BytesIO(text)
-        out.seek(0)
-        return np.load(out)
-    conn = sqlite3.connect('data', detect_types=sqlite3.PARSE_DECLTYPES)
-    sqlite3.register_converter("array", convert_array)
-    return
-
-def save_most_DB(cache_uid,text):
-    num = load_snapshot_DB(cache_uid, text)
-    #conn으로 DB 연결하기
-    #most 구간 저장하기
-    return
-
-def load_most_DB(new_uid):
-    #conn=으로 DB 연결하기
-    # most 구간 load하서 front에게 넘겨주기
-    return
-'''
 

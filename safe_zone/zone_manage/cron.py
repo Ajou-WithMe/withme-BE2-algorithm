@@ -1,3 +1,11 @@
+"""
+made by BaekJongSeong
+version 1.0V
+we do not use cron.py
+we use cron2.py and cron3.py (this is update version)
+"""
+
+
 import constants,connectDB,vertify,util
 from datetime import datetime, timedelta
 from .models import SafeZone, User, ZoneLocation,UserOption,Location, InitSafeZone

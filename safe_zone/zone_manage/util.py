@@ -1,9 +1,16 @@
+"""
+made by BaekJongSeong
+util for
+safe_zone production,
+safe_zone enlargement/reduction,
+data TTL calculation,
+"""
+
 from datetime import datetime, timedelta
 from django.utils import timezone
 from . import vertify,connectDB
 import pytz,copy
 import numpy as np
-#from con_project.project import connectDB
 
 
 def start_with_user_vertex(user_ttl):
@@ -170,32 +177,3 @@ def personal_box_recovery_all_users(user_id,old_vertex_recovery,ttl):
         if (vertex[0][1] < min_y): min_y = vertex[0][1]
 
     return max_x, min_y, old_vertex_recovery, ttl
-
-
-
-def start_perbox_newver(old_vertex,old_vertex_recovery,per_box_size,ttl):
-    total_min_x, total_min_y, total_max_x, total_max_y, coordi_sort1 = find_minmax_vertex(old_vertex)
-    temp_x = total_max_x  # frontemd에서 좌표 받아오면 전체 safe_zone에 대한 꼭지점임. 개개인 박스 꼭짓점이 아니고!!
-    temp_y = total_min_y  # 내가 personal_box 사이즈로 나눠서 어짜피 좌표 다 하나씩 일일히 추가해야함
-    per_box = per_box_size / 100000
-    digit = len(str(per_box)) - 2
-    t_x = temp_x
-    while True:
-        t_y = temp_y
-        if (t_x <= total_min_x): break  # 이 말은 다음 경우 포함. x=-10인데, 박스 만들라보니까 마지막 박스가x=-9~-12로 됨. 즉 -10인 원래 경계는 오바했으나, 박스 하나 추가되면서 끝나는거므로 ㅇ
-        while True:  # 이 말은 다음 경우 포함. y=10인데, 박스 만들라보니까 마지막 박스가y=9~12로 됨. 즉 10인 원래 경계는 오바했으나, 박스 하나 추가되면서 끝나는거므로 ㅇㅋ
-            if (t_y >= total_max_y): break
-            temp = []
-            t_xx = round(t_x,digit);t_yy = round(t_y,digit);t_xx_per = round(t_x - per_box,digit);t_yy_per = round(t_y + per_box,digit)
-            temp.append((t_yy,t_xx))
-            temp.append((t_yy_per, t_xx))
-            temp.append((t_yy_per, t_xx_per))
-            temp.append((t_yy, t_xx_per))
-            temp.append((t_yy, t_xx))
-            ttl.append(0)#temp.append(0) #old_vertex에 포함되어있지 않다는 소리!!!!
-            old_vertex_recovery.append(temp)
-            t_y = t_y + per_box
-
-        t_x = t_x - per_box
-
-    return temp_x, temp_y, old_vertex_recovery,ttl #좌표 4개씩으로 된거만 추가되어있고, 시간ttl은 없다!!

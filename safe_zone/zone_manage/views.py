@@ -16,22 +16,6 @@ from datetime import datetime, timedelta
 import pytz
 
 
-'''
-if request.method == 'GET':
-        connectDB.uuuser()
-        #serializer = AddressesSerializer(query_set, many=True) 이렇게 query 결과를 serializer에 담아주기만 하면 json으로 뽑아줌!!!
-        return HttpResponse('GET' + ' jongseong') #JsonResponse(serializer.data, safe=False)
-elif request.method == 'POST':
-        data = JSONParser().parse(request)
-        print(data)
-        data1 = {
-            "success": 200,
-            "status": 401,
-            "data": data
-        }
-        received_json_data = json.loads(request.body)
-        return JsonResponse(data1, safe=False) #content_type='applictaion/json'
-'''
 @csrf_exempt
 def connect(request):
     connectDB.con_nect()
@@ -77,6 +61,7 @@ def Init_SafeZone(request):
         except:
             return JsonResponse({'message': 'token expired.'}, status=401)
         print(str(jsondata['sub']))
+
         #constants.new_uid =str(jsondata['sub'])
         data = JSONParser().parse(request)
         #constants.old_vertex, constants.new_uid =[tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))], uid #str(uid)
@@ -84,19 +69,9 @@ def Init_SafeZone(request):
         stat, total_max_x, total_min_y = vertify.zone_min_size(old_vertex) #여기까지가 20ms
 
         if stat == 1:
-            '''
-            old_vertex_recovery=[];ttl=[]
-            print("start the init process")
-            constants.temp_x, constants.temp_y, old_vertex_recovery, ttl = util.start_perbox(constants.old_vertex, old_vertex_recovery,constants.per_box_size, ttl)
-            constants.user_ttl = util.start_with_user_vertex(constants.user_ttl)
-            old_vertex_recovery, ttl = util.perbox_process(constants.old_vertex, old_vertex_recovery, ttl)
-            print(len(old_vertex_recovery)) #여기까지가 346ms
-            connectDB.save_DB_old_vertex(constants.new_uid, constants.old_vertex)
-            connectDB.save_recovery_ttl(constants.new_uid, ttl)
-            connectDB.save_DB_old_vertex_recovery(constants.new_uid, old_vertex_recovery)
-            connectDB.save_user_ttl(constants.new_uid, constants.user_ttl,total_max_x,total_min_y)# 여기까지(recovery 5천개 넣는거 빼고)가 816ms
-            '''
-            return_status = 201;success = True;stat={"temp_x":total_max_x, "temp_y":total_min_y}
+            return_status = 201
+            success = True
+            stat={"temp_x":total_max_x, "temp_y":total_min_y}
 
         data1 = {
                 "success": success,
@@ -118,7 +93,6 @@ def put(request):
 
     old_vertex = [tuple(data['safeZone'][k].values()) for k in range(len(data['safeZone']))]
     print(new_uid)
-    #print(constants.old_vertex)
     stat, total_max_x, total_min_y = vertify.zone_min_size(old_vertex)
 
     #just make the hole square including all safe_zone vertices
@@ -132,7 +106,10 @@ def put(request):
     connectDB.save_recovery_ttl(new_uid, ttl)
     connectDB.save_DB_old_vertex_recovery(new_uid, old_vertex_recovery)
     connectDB.save_user_ttl(new_uid, constants.user_ttl, total_max_x,total_min_y)  # 여기까지(recovery 5천개 넣는거 빼고)가 816ms
-    return_status = 201;    success = True;    stat = {"temp_x": total_max_x, "temp_y": total_min_y}
+    return_status = 201
+    success = True
+    stat = {"temp_x": total_max_x, "temp_y": total_min_y}
+
     data1 = {
         "success": success,
         "status": return_status,
@@ -599,3 +576,19 @@ def test(request):
     }
     return JsonResponse(res_data, safe=False)
 
+'''
+if request.method == 'GET':
+        connectDB.uuuser()
+        #serializer = AddressesSerializer(query_set, many=True) 이렇게 query 결과를 serializer에 담아주기만 하면 json으로 뽑아줌!!!
+        return HttpResponse('GET' + ' jongseong') #JsonResponse(serializer.data, safe=False)
+elif request.method == 'POST':
+        data = JSONParser().parse(request)
+        print(data)
+        data1 = {
+            "success": 200,
+            "status": 401,
+            "data": data
+        }
+        received_json_data = json.loads(request.body)
+        return JsonResponse(data1, safe=False) #content_type='applictaion/json'
+'''

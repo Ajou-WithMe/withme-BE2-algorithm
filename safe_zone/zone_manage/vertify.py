@@ -1,8 +1,17 @@
+"""
+made by BaekJongSeong
+this part: algorithm below
+safe_zone enlargement/reduction,
+algorithm: vertify safe_zone inside/outside
+"""
+
 from datetime import datetime, timedelta
 from . import util, connectDB
 from django.utils import timezone
 #from con_project.project import connectDB
 import re,pytz
+
+
 
 def list_chunk(lst, n):
     return [tuple(lst[i:i+n]) for i in range(0, len(lst), n)]

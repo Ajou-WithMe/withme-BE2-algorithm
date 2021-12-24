@@ -1,3 +1,10 @@
+"""
+made by BaekJongSeong
+cron2.py and cron3.py for schedular.
+modify cron.py because of refer another .py file
+we just running API regularly and we can do what we want
+"""
+
 from django.views.decorators.csrf import csrf_exempt
 import requests
 
